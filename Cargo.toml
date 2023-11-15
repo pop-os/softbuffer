@@ -53,7 +53,7 @@ version = "0.3.55"
 features = ["CanvasRenderingContext2d", "Document", "Element", "HtmlCanvasElement", "ImageData", "Window"]
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.3"
+redox_syscall = "0.4"
 
 [build-dependencies]
 cfg_aliases = "0.1.1"
