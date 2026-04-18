@@ -163,9 +163,6 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> OrbitalImpl<D, W> {
 
             // Window buffer map is dropped here
         }
-
-        // Tell orbital to show the latest window data
-        syscall::fsync(self.window_fd()).expect("failed to sync orbital window");
     }
 
     /// Fetch the buffer from the window.
@@ -209,10 +206,13 @@ impl<'a, D: HasDisplayHandle, W: HasWindowHandle> BufferImpl<'a, D, W> {
     }
 
     pub fn present(self) -> Result<(), SoftBufferError> {
+        self.present_with_damage(&[])
+    }
+
+    pub fn present_with_damage(self, damage: &[Rect]) -> Result<(), SoftBufferError> {
         match self.pixels {
             Pixels::Mapping(mapping) => {
                 drop(mapping);
-                syscall::fsync(self.imp.window_fd()).expect("failed to sync orbital window");
                 self.imp.presented = true;
             }
             Pixels::Buffer(buffer) => {
@@ -221,10 +221,19 @@ impl<'a, D: HasDisplayHandle, W: HasWindowHandle> BufferImpl<'a, D, W> {
             }
         }
 
-        Ok(())
-    }
+        // Tell orbital to show the latest window data
+        if damage.is_empty() {
+            syscall::fsync(self.imp.window_fd()).expect("failed to sync orbital window");
+        } else {
+            use std::fmt::Write;
+            let mut damage_buf = "Y".to_string();
+            for m in damage {
+                let _ = write!(damage_buf, ",{},{},{},{}", m.x, m.y, m.width, m.height);
+            }
+            syscall::write(self.imp.window_fd(), damage_buf.as_bytes())
+                .expect("failed to sync orbital window");
+        }
 
-    pub fn present_with_damage(self, _damage: &[Rect]) -> Result<(), SoftBufferError> {
-        self.present()
+        Ok(())
     }
 }
