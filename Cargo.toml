@@ -70,7 +70,7 @@ features = [
 ]
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.5"
+libredox = "0.1.18"
 
 [build-dependencies]
 cfg_aliases = "0.2.0"

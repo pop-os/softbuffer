@@ -11,22 +11,24 @@ struct OrbitalMap {
 }
 
 impl OrbitalMap {
-    unsafe fn new(fd: usize, size_unaligned: usize) -> syscall::Result<Self> {
+    unsafe fn new(fd: usize, size_unaligned: usize) -> std::io::Result<Self> {
+        // from redox_syscall
+        const PAGE_SIZE: usize = 4096;
         // Page align size
-        let pages = (size_unaligned + syscall::PAGE_SIZE - 1) / syscall::PAGE_SIZE;
-        let size = pages * syscall::PAGE_SIZE;
+        let pages = (size_unaligned + PAGE_SIZE - 1) / PAGE_SIZE;
+        let size = pages * PAGE_SIZE;
 
         // Map window buffer
         let address = unsafe {
-            syscall::fmap(
+            libredox::call::mmap(libredox::call::MmapArgs {
+                addr: core::ptr::null_mut(),
+                length: size,
+                prot: libredox::flag::PROT_READ | libredox::flag::PROT_WRITE,
+                flags: libredox::flag::MAP_SHARED,
                 fd,
-                &syscall::Map {
-                    offset: 0,
-                    size,
-                    flags: syscall::PROT_READ | syscall::PROT_WRITE | syscall::MAP_SHARED,
-                    address: 0,
-                },
-            )?
+                offset: 0,
+            })?
+            .addr()
         };
 
         Ok(Self {
@@ -49,7 +51,8 @@ impl Drop for OrbitalMap {
     fn drop(&mut self) {
         unsafe {
             // Unmap window buffer on drop
-            syscall::funmap(self.address, self.size).expect("failed to unmap orbital window");
+            libredox::call::munmap(self.address as _, self.size)
+                .expect("failed to unmap orbital window");
         }
     }
 }
@@ -108,7 +111,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> OrbitalImpl<D, W> {
         let mut window_height = 0;
 
         let mut buf: [u8; 4096] = [0; 4096];
-        let count = syscall::fpath(self.window_fd(), &mut buf).unwrap();
+        let count = libredox::call::fpath(self.window_fd(), &mut buf).unwrap();
         let path = str::from_utf8(&buf[..count]).unwrap();
         // orbital:/x/y/w/h/t
         let mut parts = path.split('/').skip(3);
@@ -223,14 +226,14 @@ impl<'a, D: HasDisplayHandle, W: HasWindowHandle> BufferImpl<'a, D, W> {
 
         // Tell orbital to show the latest window data
         if damage.is_empty() {
-            syscall::fsync(self.imp.window_fd()).expect("failed to sync orbital window");
+            libredox::call::fsync(self.imp.window_fd()).expect("failed to sync orbital window");
         } else {
             use std::fmt::Write;
             let mut damage_buf = "Y".to_string();
             for m in damage {
                 let _ = write!(damage_buf, ",{},{},{},{}", m.x, m.y, m.width, m.height);
             }
-            syscall::write(self.imp.window_fd(), damage_buf.as_bytes())
+            libredox::call::write(self.imp.window_fd(), damage_buf.as_bytes())
                 .expect("failed to sync orbital window");
         }
 
